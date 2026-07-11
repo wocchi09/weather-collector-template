@@ -1,7 +1,7 @@
 name: nightly-weather-collect
 
 # ───────────────────────────────────────────────
-#  毎晩じどうで天気データをあつめて CSV にほぞんし、
+#  毎晩自動で天気データをあつめて CSV にほぞんし、
 #  リポジトリに自動コミットするワークフロー。
 # ───────────────────────────────────────────────
 
@@ -42,18 +42,27 @@ jobs:
       - name: 天気データを収集
         run: python src/collect.py
 
-# 5. 変化があれば自動コミット＆プッシュ
+      # 5. 変化があれば自動コミット＆プッシュ
       - name: 変更を自動コミット
         run: |
+          # コミットする人の名前とメールを設定
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # rebase時に名前が必要な環境向けのおまじない
+          git config rebase.autoStash true
+
           git add data/
+
           # 変更がなければコミットせず正常終了する
           if git diff --staged --quiet; then
             echo "変更なし。コミットをスキップします。"
-          else
-            git commit -m "data: $(date -u '+%Y-%m-%d') の天気データを追加"
-            # push前に最新を取り込む（ぶつかり防止の保険）
-            git pull --rebase origin main
-            git push
+            exit 0
           fi
+
+          git commit -m "data: $(date -u '+%Y-%m-%d') の天気データを追加"
+
+          # push前に、GitHub側の最新を取り込む（ぶつかり防止）
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+
+          # 最新を取り込んだ状態でpush
+          git push origin "HEAD:${GITHUB_REF_NAME}"
