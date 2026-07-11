@@ -1,0 +1,57 @@
+name: nightly-weather-collect
+
+# ───────────────────────────────────────────────
+#  毎晩じどうで天気データをあつめて CSV にほぞんし、
+#  リポジトリに自動コミットするワークフロー。
+# ───────────────────────────────────────────────
+
+on:
+  # ① 毎日きまった時間に自動実行する設定
+  #    cron は UTC（世界標準時）で書く。JST の23:00 = UTC 14:00。
+  #    「分 時 日 月 曜日」の順。下は「毎日 UTC14:00 = 日本の夜11時」。
+  schedule:
+    - cron: "0 14 * * *"
+
+  # ② GitHub の画面から手動でポチッと実行できるようにする（テスト用）
+  workflow_dispatch:
+
+# コミットするために書き込み権限をあたえる
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. リポジトリのコードをダウンロード
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      # 2. Python をつかえるようにする
+      - name: Python をセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 3. 必要なライブラリをインストール
+      - name: ライブラリをインストール
+        run: pip install -r requirements.txt
+
+      # 4. データ収集スクリプトを実行
+      - name: 天気データを収集
+        run: python src/collect.py
+
+      # 5. 変化があれば自動コミット＆プッシュ
+      - name: 変更を自動コミット
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          # 変更がなければコミットせず正常終了する
+          if git diff --staged --quiet; then
+            echo "変更なし。コミットをスキップします。"
+          else
+            git commit -m "data: $(date -u '+%Y-%m-%d') の天気データを追加"
+            git push
+          fi
